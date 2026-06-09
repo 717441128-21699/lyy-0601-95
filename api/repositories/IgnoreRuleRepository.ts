@@ -50,6 +50,9 @@ export class IgnoreRuleRepository extends BaseRepository<IgnoreRule> {
     const id = crypto.randomUUID();
     const now = new Date().toISOString();
     
+    const isActiveVal = rule.isActive !== undefined ? (rule.isActive ? 1 : 0) : (rule.enabled !== undefined ? (rule.enabled ? 1 : 0) : 1);
+    const enabledVal = rule.enabled !== undefined ? (rule.enabled ? 1 : 0) : isActiveVal;
+    
     this.executeQuery(
       `INSERT INTO ignore_rules (id, name, pattern, type, is_active, enabled, created_at)
        VALUES (?, ?, ?, ?, ?, ?, ?)`,
@@ -58,8 +61,8 @@ export class IgnoreRuleRepository extends BaseRepository<IgnoreRule> {
         rule.name || rule.pattern,
         rule.pattern,
         rule.type,
-        rule.isActive ? 1 : 1,
-        rule.enabled ? 1 : 0,
+        isActiveVal,
+        enabledVal,
         now
       ]
     );
@@ -74,8 +77,16 @@ export class IgnoreRuleRepository extends BaseRepository<IgnoreRule> {
     if (rule.name !== undefined) { fields.push('name = ?'); values.push(rule.name); }
     if (rule.pattern !== undefined) { fields.push('pattern = ?'); values.push(rule.pattern); }
     if (rule.type !== undefined) { fields.push('type = ?'); values.push(rule.type); }
-    if (rule.isActive !== undefined) { fields.push('is_active = ?'); values.push(rule.isActive ? 1 : 0); }
-    if (rule.enabled !== undefined) { fields.push('enabled = ?'); values.push(rule.enabled ? 1 : 0); }
+    
+    if (rule.isActive !== undefined) {
+      const activeVal = rule.isActive ? 1 : 0;
+      fields.push('is_active = ?'); values.push(activeVal);
+      fields.push('enabled = ?'); values.push(activeVal);
+    } else if (rule.enabled !== undefined) {
+      const activeVal = rule.enabled ? 1 : 0;
+      fields.push('enabled = ?'); values.push(activeVal);
+      fields.push('is_active = ?'); values.push(activeVal);
+    }
     
     values.push(id);
 

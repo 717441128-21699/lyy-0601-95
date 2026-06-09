@@ -68,6 +68,8 @@ export class ScheduledTaskRepository extends BaseRepository<ScheduledTask> {
     const isEnabledVal = task.isEnabled !== undefined ? (task.isEnabled ? 1 : 0) : (task.enabled !== undefined ? (task.enabled ? 1 : 0) : 1);
     const enabledVal = task.enabled !== undefined ? (task.enabled ? 1 : 0) : isEnabledVal;
     
+    const targetPathVal = task.targetPath !== undefined ? task.targetPath : (task.sourcePath || '');
+    
     this.executeQuery(
       `INSERT INTO scheduled_tasks (id, name, type, cron_expression, target_path, is_enabled, last_run_at, action, source_path, enabled, last_run, next_run, status, last_error, created_at)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
@@ -76,7 +78,7 @@ export class ScheduledTaskRepository extends BaseRepository<ScheduledTask> {
         task.name,
         task.type || 'scan_and_classify',
         task.cronExpression,
-        task.targetPath || task.sourcePath,
+        targetPathVal,
         isEnabledVal,
         task.lastRunAt || null,
         task.action || task.type || 'scan_and_classify',
