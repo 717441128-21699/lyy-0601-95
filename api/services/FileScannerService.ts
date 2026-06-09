@@ -17,22 +17,54 @@ export class FileScannerService {
     const fileName = path.basename(filePath);
     const ext = path.extname(filePath).toLowerCase();
 
+    const matchWildcard = (str: string, pattern: string): boolean => {
+      const regexStr = pattern
+        .replace(/\./g, '\\.')
+        .replace(/\*/g, '.*')
+        .replace(/\?/g, '.');
+      const regex = new RegExp(`^${regexStr}$`, 'i');
+      return regex.test(str);
+    };
+
+    const matchPatterns = (value: string, pattern: string): boolean => {
+      const patterns = pattern.split(/[,，]/).map(p => p.trim()).filter(p => p);
+      return patterns.some(p => matchWildcard(value, p));
+    };
+
+    const matchExtension = (fileExt: string, pattern: string): boolean => {
+      const patterns = pattern.split(/[,，]/).map(p => p.trim()).filter(p => p);
+      return patterns.some(p => {
+        const ext = p.startsWith('.') ? p.toLowerCase() : `.${p.toLowerCase()}`;
+        return fileExt === ext;
+      });
+    };
+
+    const matchFolder = (pathStr: string, pattern: string): boolean => {
+      const patterns = pattern.split(/[,，]/).map(p => p.trim()).filter(p => p);
+      return patterns.some(p => {
+        if (p.includes('*') || p.includes('?')) {
+          return matchWildcard(pathStr, p) || pathStr.split(path.sep).some(part => matchWildcard(part, p));
+        }
+        return pathStr.includes(p) || pathStr.split(path.sep).some(part => part === p || part.includes(p));
+      });
+    };
+
     for (const rule of ignoreRules) {
       if (!rule.isActive) continue;
 
       switch (rule.type) {
         case 'filename':
-          if (!isDirectory && (fileName === rule.pattern || fileName.includes(rule.pattern))) {
+          if (!isDirectory && matchPatterns(fileName, rule.pattern)) {
             return true;
           }
           break;
         case 'extension':
-          if (!isDirectory && ext === rule.pattern.toLowerCase()) {
+          if (!isDirectory && matchExtension(ext, rule.pattern)) {
             return true;
           }
           break;
         case 'folder':
-          if (filePath.includes(rule.pattern)) {
+          if (matchFolder(filePath, rule.pattern)) {
             return true;
           }
           break;

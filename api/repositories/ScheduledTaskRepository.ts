@@ -101,11 +101,20 @@ export class ScheduledTaskRepository extends BaseRepository<ScheduledTask> {
     if (updates.type !== undefined) { fields.push('type = ?'); values.push(updates.type); }
     if (updates.cronExpression !== undefined) { fields.push('cron_expression = ?'); values.push(updates.cronExpression); }
     if (updates.targetPath !== undefined) { fields.push('target_path = ?'); values.push(updates.targetPath); }
-    if (updates.isEnabled !== undefined) { fields.push('is_enabled = ?'); values.push(updates.isEnabled ? 1 : 0); }
+    
+    if (updates.isEnabled !== undefined) {
+      const enabledVal = updates.isEnabled ? 1 : 0;
+      fields.push('is_enabled = ?'); values.push(enabledVal);
+      fields.push('enabled = ?'); values.push(enabledVal);
+    } else if (updates.enabled !== undefined) {
+      const enabledVal = updates.enabled ? 1 : 0;
+      fields.push('enabled = ?'); values.push(enabledVal);
+      fields.push('is_enabled = ?'); values.push(enabledVal);
+    }
+    
     if (updates.lastRunAt !== undefined) { fields.push('last_run_at = ?'); values.push(updates.lastRunAt || null); }
     if (updates.action !== undefined) { fields.push('action = ?'); values.push(updates.action); }
     if (updates.sourcePath !== undefined) { fields.push('source_path = ?'); values.push(updates.sourcePath); }
-    if (updates.enabled !== undefined) { fields.push('enabled = ?'); values.push(updates.enabled ? 1 : 0); }
     if (updates.lastRun !== undefined) { fields.push('last_run = ?'); values.push(updates.lastRun || null); }
     if (updates.nextRun !== undefined) { fields.push('next_run = ?'); values.push(updates.nextRun || null); }
     if (updates.status !== undefined) { fields.push('status = ?'); values.push(updates.status || null); }

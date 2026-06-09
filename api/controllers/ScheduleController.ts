@@ -6,7 +6,7 @@ export class ScheduleController {
   private scheduleService: ScheduleService;
 
   constructor() {
-    this.scheduleService = new ScheduleService();
+    this.scheduleService = ScheduleService.getInstance();
   }
 
   async getTasks(req: Request, res: Response<ApiResponse<ScheduledTask[]>>) {

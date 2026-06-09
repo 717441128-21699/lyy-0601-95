@@ -14,14 +14,22 @@ export class ScheduleService {
   private fileClassifierService: FileClassifierService;
   private todoGeneratorService: TodoGeneratorService;
   private runningTasks: Map<string, cron.ScheduledTask>;
+  private static instance: ScheduleService;
 
-  constructor() {
+  private constructor() {
     this.taskRepo = new ScheduledTaskRepository();
     this.settingsRepo = new SettingsRepository();
     this.fileScannerService = new FileScannerService();
     this.fileClassifierService = new FileClassifierService();
     this.todoGeneratorService = new TodoGeneratorService();
     this.runningTasks = new Map();
+  }
+
+  public static getInstance(): ScheduleService {
+    if (!ScheduleService.instance) {
+      ScheduleService.instance = new ScheduleService();
+    }
+    return ScheduleService.instance;
   }
 
   async startAll(): Promise<void> {
