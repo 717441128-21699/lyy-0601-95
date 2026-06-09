@@ -43,7 +43,7 @@ interface AppState {
   addClassificationRule: (rule: Omit<ClassificationRule, 'id' | 'createdAt' | 'updatedAt'>) => Promise<void>;
   updateClassificationRule: (id: string, rule: Partial<ClassificationRule>) => Promise<void>;
   deleteClassificationRule: (id: string) => Promise<void>;
-  generateClassificationPreview: (groupBy?: string) => Promise<void>;
+  generateClassificationPreview: (files?: FileInfo[], groupBy?: string) => Promise<void>;
   executeClassification: () => Promise<any>;
 
   fetchRenameRules: () => Promise<void>;
@@ -199,11 +199,13 @@ export const useAppStore = create<AppState>((set, get) => ({
     }
   },
 
-  generateClassificationPreview: async (groupBy = 'rule') => {
+  generateClassificationPreview: async (files?: FileInfo[], groupBy = 'rule') => {
     try {
       set({ loading: true, error: null });
-      const files = get().selectedFiles.length > 0 ? get().selectedFiles : get().scannedFiles;
-      const response = await api.classification.preview(files, groupBy as any);
+      const filesToUse = files && files.length > 0 
+        ? files 
+        : (get().selectedFiles.length > 0 ? get().selectedFiles : get().scannedFiles);
+      const response = await api.classification.preview(filesToUse, groupBy as any);
       if (response.success) {
         set({ classificationPreview: response.data });
       }

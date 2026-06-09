@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import {
   Plus,
   Edit2,
@@ -16,6 +17,7 @@ import Modal from '../components/UI/Modal';
 import type { ClassificationRule, RenameRule } from '../../shared/types';
 
 const Rules: React.FC = () => {
+  const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState<'classification' | 'rename'>('classification');
   const [showModal, setShowModal] = useState(false);
   const [editingRule, setEditingRule] = useState<any>(null);
@@ -32,6 +34,8 @@ const Rules: React.FC = () => {
     addRenameRule,
     updateRenameRule,
     deleteRenameRule,
+    scannedFiles,
+    generateClassificationPreview,
   } = useAppStore();
 
   useEffect(() => {
@@ -84,14 +88,21 @@ const Rules: React.FC = () => {
       } else {
         await addClassificationRule(formData);
       }
+      setShowModal(false);
+      if (scannedFiles.length > 0) {
+        await generateClassificationPreview(scannedFiles);
+        navigate('/classification');
+      } else {
+        navigate('/classification');
+      }
     } else {
       if (editingRule) {
         await updateRenameRule(editingRule.id, formData);
       } else {
         await addRenameRule(formData);
       }
+      setShowModal(false);
     }
-    setShowModal(false);
   };
 
   const classificationTypeOptions = [

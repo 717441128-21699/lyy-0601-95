@@ -146,6 +146,8 @@ export interface ScheduledTask {
   enabled: boolean;
   lastRun?: string;
   nextRun?: string;
+  status?: 'pending' | 'running' | 'completed' | 'failed';
+  lastError?: string;
   createdAt: string;
 }
 

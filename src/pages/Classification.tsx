@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   ListFilter,
   FolderOpen,
@@ -43,13 +43,19 @@ const Classification: React.FC = () => {
     executeClassification,
   } = useAppStore();
 
+  useEffect(() => {
+    if (scannedFiles.length > 0 && !classificationPreview && !loading) {
+      generateClassificationPreview(scannedFiles, groupBy as any);
+    }
+  }, [scannedFiles.length, classificationPreview, loading, groupBy, generateClassificationPreview, scannedFiles]);
+
   const handleGeneratePreview = () => {
     if (scannedFiles.length === 0) {
       alert('请先扫描文件');
       navigate('/scan');
       return;
     }
-    generateClassificationPreview(groupBy as any);
+    generateClassificationPreview(scannedFiles, groupBy as any);
   };
 
   const handleExecute = async () => {

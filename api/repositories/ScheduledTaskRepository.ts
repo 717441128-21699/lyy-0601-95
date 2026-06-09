@@ -14,6 +14,8 @@ interface TaskRow {
   enabled: number;
   last_run: string | null;
   next_run: string | null;
+  status: string | null;
+  last_error: string | null;
   created_at: string;
 }
 
@@ -36,6 +38,8 @@ export class ScheduledTaskRepository extends BaseRepository<ScheduledTask> {
       enabled: row.enabled === 1,
       lastRun: row.last_run || undefined,
       nextRun: row.next_run || undefined,
+      status: (row.status as ScheduledTask['status']) || undefined,
+      lastError: row.last_error || undefined,
       createdAt: row.created_at,
     };
   }
@@ -61,22 +65,27 @@ export class ScheduledTaskRepository extends BaseRepository<ScheduledTask> {
     const id = crypto.randomUUID();
     const now = new Date().toISOString();
     
+    const isEnabledVal = task.isEnabled !== undefined ? (task.isEnabled ? 1 : 0) : (task.enabled !== undefined ? (task.enabled ? 1 : 0) : 1);
+    const enabledVal = task.enabled !== undefined ? (task.enabled ? 1 : 0) : isEnabledVal;
+    
     this.executeQuery(
-      `INSERT INTO scheduled_tasks (id, name, type, cron_expression, target_path, is_enabled, last_run_at, action, source_path, enabled, last_run, next_run, created_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO scheduled_tasks (id, name, type, cron_expression, target_path, is_enabled, last_run_at, action, source_path, enabled, last_run, next_run, status, last_error, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         id,
         task.name,
         task.type || 'scan_and_classify',
         task.cronExpression,
         task.targetPath || task.sourcePath,
-        task.isEnabled ? 1 : 1,
+        isEnabledVal,
         task.lastRunAt || null,
         task.action || task.type || 'scan_and_classify',
         task.sourcePath,
-        task.enabled ? 1 : 0,
+        enabledVal,
         task.lastRun || null,
         task.nextRun || null,
+        task.status || null,
+        task.lastError || null,
         now,
       ]
     );
@@ -99,6 +108,8 @@ export class ScheduledTaskRepository extends BaseRepository<ScheduledTask> {
     if (updates.enabled !== undefined) { fields.push('enabled = ?'); values.push(updates.enabled ? 1 : 0); }
     if (updates.lastRun !== undefined) { fields.push('last_run = ?'); values.push(updates.lastRun || null); }
     if (updates.nextRun !== undefined) { fields.push('next_run = ?'); values.push(updates.nextRun || null); }
+    if (updates.status !== undefined) { fields.push('status = ?'); values.push(updates.status || null); }
+    if (updates.lastError !== undefined) { fields.push('last_error = ?'); values.push(updates.lastError || null); }
     
     values.push(id);
 

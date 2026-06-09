@@ -30,7 +30,7 @@ export class ClassificationRuleRepository extends BaseRepository<ClassificationR
       targetFolder: row.target_folder,
       isActive: row.is_active === 1,
       priority: row.priority,
-      conditions: JSON.parse(row.conditions),
+      conditions: row.conditions ? JSON.parse(row.conditions) : [],
       createdAt: row.created_at,
       updatedAt: row.updated_at,
     };
@@ -66,9 +66,9 @@ export class ClassificationRuleRepository extends BaseRepository<ClassificationR
         rule.type || 'keyword',
         rule.pattern || '',
         rule.targetFolder,
-        rule.isActive ? 1 : 1,
-        rule.priority,
-        JSON.stringify(rule.conditions),
+        rule.isActive !== undefined ? (rule.isActive ? 1 : 0) : 1,
+        rule.priority ?? 1,
+        JSON.stringify(rule.conditions ?? []),
         now,
         now
       ]

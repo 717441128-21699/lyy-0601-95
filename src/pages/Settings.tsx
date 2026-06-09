@@ -82,7 +82,7 @@ const Settings: React.FC = () => {
     setEditingIgnore(null);
     setIgnoreForm({
       name: '',
-      type: 'pattern' as IgnoreRule['type'],
+      type: 'filename' as IgnoreRule['type'],
       pattern: '',
       isActive: true,
     });
@@ -603,12 +603,12 @@ const Settings: React.FC = () => {
             <label className="label">规则类型</label>
             <select
               className="input-field"
-              value={ignoreForm.type || 'pattern'}
-              onChange={(e) => setIgnoreForm({ ...ignoreForm, type: e.target.value })}
+              value={ignoreForm.type || 'filename'}
+              onChange={(e) => setIgnoreForm({ ...ignoreForm, type: e.target.value as IgnoreRule['type'] })}
             >
-              <option value="pattern">文件名匹配</option>
+              <option value="filename">文件名匹配</option>
               <option value="extension">按扩展名</option>
-              <option value="directory">按目录</option>
+              <option value="folder">按目录</option>
             </select>
           </div>
           <div>
