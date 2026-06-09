@@ -43,6 +43,36 @@ export class UndoService {
         const targetDir = path.dirname(change.oldPath);
         await fs.mkdir(targetDir, { recursive: true });
 
+        // 处理被删除的文件（从备份恢复）
+        if (change.newName === '' && change.newPath.includes('.docorganizer_backup')) {
+          try {
+            if (await fs.stat(change.newPath).catch(() => false)) {
+              // 从备份中恢复文件
+              const fileContent = await fs.readFile(change.newPath);
+              await fs.writeFile(change.oldPath, fileContent);
+              
+              // 重新创建文件记录
+              const fileState = snapshot.fileStates.find(f => f.id === change.fileId);
+              if (fileState) {
+                this.fileRecordRepo.create(fileState);
+              }
+              
+              // 删除备份文件
+              await fs.unlink(change.newPath).catch(() => {});
+              
+              restored++;
+            } else {
+              failed++;
+              errors.push(`备份文件已不存在: ${change.newPath}`);
+            }
+          } catch (error) {
+            failed++;
+            errors.push(`恢复删除文件 ${change.oldName}: ${(error as Error).message}`);
+          }
+          continue;
+        }
+
+        // 处理被移动的文件
         if (await fs.stat(change.newPath).catch(() => false)) {
           await fs.rename(change.newPath, change.oldPath);
 

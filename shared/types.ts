@@ -36,9 +36,18 @@ export interface FileInfo {
   deadline?: string;
   isDuplicate?: boolean;
   duplicateOf?: string;
+  duplicateGroupId?: string;
+  toDelete?: boolean;
   missingAttachments?: string[];
   targetFolder?: string;
   newName?: string;
+}
+
+export interface DuplicateGroup {
+  groupId: string;
+  files: FileInfo[];
+  keepFile: FileInfo;
+  toDelete: FileInfo[];
 }
 
 export interface ClassificationRule {
@@ -150,6 +159,7 @@ export interface ScanResult {
 export interface ClassificationPreview {
   files: FileInfo[];
   totalFiles: number;
+  duplicateGroups: DuplicateGroup[];
   groups: Array<{
     name: string;
     files: FileInfo[];

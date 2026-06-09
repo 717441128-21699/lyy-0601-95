@@ -65,15 +65,15 @@ export class ScheduleController {
     }
   }
 
-  async runTaskNow(req: Request, res: Response<ApiResponse<void>>) {
+  async runTaskNow(req: Request, res: Response<ApiResponse<ScheduledTask | undefined>>) {
     try {
       const { id } = req.params;
-      await this.scheduleService.runTaskNow(id);
-      return res.json({ success: true, data: undefined as any });
+      const task = await this.scheduleService.runTaskNow(id);
+      return res.json({ success: true, data: task });
     } catch (error) {
       return res.status(500).json({
         success: false,
-        data: undefined as any,
+        data: undefined,
         message: (error as Error).message,
       });
     }

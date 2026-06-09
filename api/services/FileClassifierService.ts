@@ -6,6 +6,7 @@ import type {
   ClassificationRule,
   ClassificationPreview,
   FileType,
+  DuplicateGroup,
 } from '../../shared/types';
 import { ClassificationRuleRepository } from '../repositories/ClassificationRuleRepository';
 import { FileRecordRepository } from '../repositories/FileRecordRepository';
@@ -26,39 +27,59 @@ export class FileClassifierService {
   }
 
   private matchRule(file: FileInfo, rule: ClassificationRule): boolean {
-    const conditions = rule.conditions;
+    if (!rule.isActive) return false;
 
-    if (conditions.source && file.source !== conditions.source) {
-      return false;
-    }
+    const pattern = rule.pattern || '';
+    const patterns = pattern.split(/[,，]/).map(p => p.trim()).filter(p => p);
 
-    if (conditions.filenamePattern) {
-      const regex = new RegExp(conditions.filenamePattern, 'i');
-      if (!regex.test(file.name)) {
-        return false;
+    switch (rule.type) {
+      case 'keyword': {
+        const fileName = file.name.toLowerCase();
+        return patterns.some(p => fileName.includes(p.toLowerCase()));
       }
-    }
-
-    if (conditions.dateRange) {
-      const fileDate = dayjs(file.createdAt);
-      const start = dayjs(conditions.dateRange.start);
-      const end = dayjs(conditions.dateRange.end);
-      if (fileDate.isBefore(start) || fileDate.isAfter(end)) {
-        return false;
+      case 'extension': {
+        const fileExt = file.extension.toLowerCase();
+        return patterns.some(p => {
+          const ext = p.startsWith('.') ? p.toLowerCase() : `.${p.toLowerCase()}`;
+          return fileExt === ext;
+        });
       }
-    }
-
-    if (conditions.extensions && conditions.extensions.length > 0) {
-      if (!conditions.extensions.includes(file.extension.toLowerCase())) {
-        return false;
+      case 'date': {
+        const fileDate = dayjs(file.createdAt);
+        const fileYearMonth = fileDate.format('YYYY-MM');
+        const fileYear = fileDate.format('YYYY');
+        return patterns.some(p => {
+          if (p.includes('-')) {
+            return fileYearMonth === p || fileYearMonth.startsWith(p);
+          }
+          return fileYear === p;
+        });
       }
+      case 'source': {
+        if (!file.source) return false;
+        const sourceLower = file.source.toLowerCase();
+        return patterns.some(p => sourceLower.includes(p.toLowerCase()));
+      }
+      case 'type': {
+        return patterns.some(p => {
+          const typeLower = p.toLowerCase();
+          if (typeLower === 'invoice' || typeLower === '发票') return file.type === 'invoice';
+          if (typeLower === 'contract' || typeLower === '合同') return file.type === 'contract';
+          if (typeLower === 'notice' || typeLower === '通知') return file.type === 'notice';
+          if (typeLower === 'document' || typeLower === '文档') return file.type === 'document';
+          if (typeLower === 'spreadsheet' || typeLower === '表格') return file.type === 'spreadsheet';
+          if (typeLower === 'image' || typeLower === '图片') return file.type === 'image';
+          if (typeLower === 'video' || typeLower === '视频') return file.type === 'video';
+          if (typeLower === 'audio' || typeLower === '音频') return file.type === 'audio';
+          if (typeLower === 'archive' || typeLower === '压缩包') return file.type === 'archive';
+          if (typeLower === 'code' || typeLower === '代码') return file.type === 'code';
+          if (typeLower === 'other' || typeLower === '其他') return file.type === 'other';
+          return false;
+        });
+      }
+      default:
+        return false;
     }
-
-    if (conditions.fileType && file.type !== conditions.fileType) {
-      return false;
-    }
-
-    return true;
   }
 
   private classifyByDate(file: FileInfo): string {
@@ -115,11 +136,11 @@ export class FileClassifierService {
     files: FileInfo[],
     groupBy: 'rule' | 'type' | 'date' | 'extension' | 'source' = 'rule'
   ): Promise<ClassificationPreview> {
-    const rules = this.classificationRuleRepo.findAllEnabled();
+    const rules = this.classificationRuleRepo.findAllEnabled().sort((a, b) => b.priority - a.priority);
     const conflicts: ClassificationPreview['conflicts'] = [];
     const targetFoldersSet = new Set<string>();
 
-    const classifiedFiles = files.map((file) => {
+    const classifiedFiles = await Promise.all(files.map(async (file) => {
       let targetFolder = '未分类';
 
       if (groupBy === 'rule') {
@@ -139,11 +160,12 @@ export class FileClassifierService {
         targetFolder = file.source || '未知来源';
       }
 
-      const targetPath = path.join(path.dirname(file.path), '..', targetFolder, file.name);
+      const baseDir = path.dirname(file.path);
+      const targetPath = path.join(baseDir, '..', targetFolder, file.name);
       targetFoldersSet.add(targetFolder);
 
       try {
-        fs.access(targetPath);
+        await fs.access(targetPath);
         conflicts.push({
           fileId: file.id,
           targetPath,
@@ -157,7 +179,44 @@ export class FileClassifierService {
         ...file,
         targetFolder,
       };
+    }));
+
+    // 处理重复文件组
+    const duplicateGroupsMap = new Map<string, DuplicateGroup>();
+    classifiedFiles.forEach((file) => {
+      if (file.duplicateGroupId) {
+        if (!duplicateGroupsMap.has(file.duplicateGroupId)) {
+          duplicateGroupsMap.set(file.duplicateGroupId, {
+            groupId: file.duplicateGroupId,
+            files: [],
+            keepFile: file,
+            toDelete: [],
+          });
+        }
+        const group = duplicateGroupsMap.get(file.duplicateGroupId)!;
+        group.files.push(file);
+        if (file.isDuplicate) {
+          group.toDelete.push(file);
+          file.toDelete = true;
+        } else {
+          group.keepFile = file;
+        }
+      }
     });
+
+    // 确保每个重复组的 keepFile 是正确的（不是重复的那个）
+    for (const group of duplicateGroupsMap.values()) {
+      const keepFile = group.files.find(f => !f.isDuplicate) || group.files[0];
+      group.keepFile = keepFile;
+      group.toDelete = group.files.filter(f => f.id !== keepFile.id);
+      group.toDelete.forEach(f => {
+        f.toDelete = true;
+        f.isDuplicate = true;
+        f.duplicateOf = keepFile.id;
+      });
+    }
+
+    const duplicateGroups = Array.from(duplicateGroupsMap.values());
 
     const groupsMap = new Map<string, { name: string; files: FileInfo[]; targetFolder: string }>();
     classifiedFiles.forEach((file) => {
@@ -173,6 +232,7 @@ export class FileClassifierService {
     return {
       files: classifiedFiles,
       totalFiles: classifiedFiles.length,
+      duplicateGroups,
       groups,
       targetFolders: Array.from(targetFoldersSet),
       conflicts,
@@ -182,6 +242,7 @@ export class FileClassifierService {
   async executeClassification(preview: ClassificationPreview): Promise<{
     success: boolean;
     moved: number;
+    deleted: number;
     failed: number;
     snapshotId?: string;
   }> {
@@ -194,19 +255,58 @@ export class FileClassifierService {
     }> = [];
 
     let moved = 0;
+    let deleted = 0;
     let failed = 0;
     const errors: string[] = [];
 
     const snapshot = this.snapshotRepo.create({
+      action: '文件分类与去重',
+      description: '文件分类并合并重复文件',
+      fileCount: preview.files.length,
       fileStates: preview.files,
       changes: [],
     });
 
+    // 先处理重复文件删除
+    if (preview.duplicateGroups) {
+      for (const group of preview.duplicateGroups) {
+        for (const file of group.toDelete) {
+          try {
+            // 先备份文件内容到临时目录用于恢复
+            const fileContent = await fs.readFile(file.path);
+            const backupPath = path.join(path.dirname(file.path), '.docorganizer_backup', `${file.id}_${file.name}`);
+            await fs.mkdir(path.dirname(backupPath), { recursive: true });
+            await fs.writeFile(backupPath, fileContent);
+            
+            // 删除文件
+            await fs.unlink(file.path);
+            
+            changes.push({
+              fileId: file.id,
+              oldPath: file.path,
+              newPath: backupPath, // 用备份路径标记这是删除操作
+              oldName: file.name,
+              newName: '', // 空名称表示删除
+            });
+            
+            this.fileRecordRepo.delete(file.id);
+            deleted++;
+          } catch (error) {
+            failed++;
+            errors.push(`删除重复文件 ${file.name}: ${(error as Error).message}`);
+          }
+        }
+      }
+    }
+
+    // 再处理文件移动
     for (const file of preview.files) {
       if (!file.targetFolder) continue;
+      if (file.toDelete) continue; // 跳过要删除的重复文件
 
       try {
-        const targetDir = path.join(path.dirname(file.path), '..', file.targetFolder);
+        const baseDir = path.dirname(file.path);
+        const targetDir = path.join(baseDir, '..', file.targetFolder);
         const targetPath = path.join(targetDir, file.name);
 
         await fs.mkdir(targetDir, { recursive: true });
@@ -258,21 +358,22 @@ export class FileClassifierService {
     } as any);
 
     this.executionLogRepo.create({
-      action: '文件分类',
+      action: '文件分类与去重',
       level: failed > 0 ? 'warning' : 'info',
       message: failed > 0 ? `文件分类部分失败` : `文件分类完成`,
-      filesAffected: moved,
+      filesAffected: moved + deleted,
       status: failed > 0 ? 'warning' : 'success',
       details:
         failed > 0
-          ? `成功移动 ${moved} 个文件，失败 ${failed} 个: ${errors.join('; ')}`
-          : `成功移动 ${moved} 个文件`,
+          ? `成功移动 ${moved} 个文件，删除重复 ${deleted} 个，失败 ${failed} 个: ${errors.join('; ')}`
+          : `成功移动 ${moved} 个文件，删除重复 ${deleted} 个`,
       snapshotId: snapshot.id,
     });
 
     return {
       success: failed === 0,
       moved,
+      deleted,
       failed,
       snapshotId: snapshot.id,
     };

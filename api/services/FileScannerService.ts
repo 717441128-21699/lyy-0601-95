@@ -13,21 +13,21 @@ export class FileScannerService {
     this.ignoreRuleRepo = new IgnoreRuleRepository();
   }
 
-  private isIgnored(filePath: string, ignoreRules: IgnoreRule[]): boolean {
+  private isIgnored(filePath: string, ignoreRules: IgnoreRule[], isDirectory: boolean = false): boolean {
     const fileName = path.basename(filePath);
     const ext = path.extname(filePath).toLowerCase();
 
     for (const rule of ignoreRules) {
-      if (!rule.enabled) continue;
+      if (!rule.isActive) continue;
 
       switch (rule.type) {
         case 'filename':
-          if (fileName === rule.pattern || fileName.includes(rule.pattern)) {
+          if (!isDirectory && (fileName === rule.pattern || fileName.includes(rule.pattern))) {
             return true;
           }
           break;
         case 'extension':
-          if (ext === rule.pattern.toLowerCase()) {
+          if (!isDirectory && ext === rule.pattern.toLowerCase()) {
             return true;
           }
           break;
@@ -139,17 +139,43 @@ export class FileScannerService {
       sizeMap.get(file.size)!.push(file);
     }
 
+    let groupCounter = 0;
     for (const [, group] of sizeMap) {
       if (group.length > 1) {
+        const processed = new Set<string>();
         for (let i = 0; i < group.length; i++) {
+          if (processed.has(group[i].id)) continue;
+          
+          const duplicates: FileInfo[] = [group[i]];
           for (let j = i + 1; j < group.length; j++) {
-            const content1 = await fs.readFile(group[i].path);
-            const content2 = await fs.readFile(group[j].path);
+            if (processed.has(group[j].id)) continue;
             
-            if (content1.equals(content2)) {
-              group[j].isDuplicate = true;
-              group[j].duplicateOf = group[i].id;
+            try {
+              const content1 = await fs.readFile(group[i].path);
+              const content2 = await fs.readFile(group[j].path);
+              
+              if (content1.equals(content2)) {
+                duplicates.push(group[j]);
+                processed.add(group[j].id);
+              }
+            } catch {
+              // 忽略读取错误
             }
+          }
+          
+          if (duplicates.length > 1) {
+            groupCounter++;
+            const groupId = `dup_${Date.now()}_${groupCounter}`;
+            // 按修改时间排序，保留最新的文件
+            duplicates.sort((a, b) => new Date(b.modifiedAt).getTime() - new Date(a.modifiedAt).getTime());
+            duplicates.forEach((file, idx) => {
+              file.duplicateGroupId = groupId;
+              if (idx > 0) {
+                file.isDuplicate = true;
+                file.duplicateOf = duplicates[0].id;
+              }
+            });
+            processed.add(group[i].id);
           }
         }
       }
@@ -160,7 +186,7 @@ export class FileScannerService {
 
   private detectMissingAttachments(files: FileInfo[]): FileInfo[] {
     const mainFilePatterns = [
-      /(申请|报告|请示|项目|方案|计划).*\.(doc|docx|pdf)$/i,
+      /(申请|报告|请示|项目|方案|计划|总结|汇报).*\.(doc|docx|pdf)$/i,
     ];
 
     for (const file of files) {
@@ -169,24 +195,25 @@ export class FileScannerService {
       for (const pattern of mainFilePatterns) {
         if (pattern.test(file.name)) {
           const baseName = file.name.replace(/\.[^.]+$/, '');
-          const expectedAttachments = [
-            `${baseName}附件`,
-            `${baseName}附表`,
-            `${baseName}附图`,
-          ];
-
-          for (const expected of expectedAttachments) {
-            const hasAttachment = files.some(f => 
-              f.name.includes(expected) && f.id !== file.id
-            );
+          
+          const expectedPatterns = ['附件', '附表', '附图', '相关材料', '证明材料'];
+          
+          for (const ep of expectedPatterns) {
+            if (file.name.includes(ep)) {
+              continue;
+            }
+            
+            const hasAttachment = files.some(f => {
+              if (f.id === file.id) return false;
+              const fBaseName = f.name.replace(/\.[^.]+$/, '');
+              return (
+                fBaseName.includes(baseName) && 
+                f.name.includes(ep)
+              );
+            });
             
             if (!hasAttachment) {
-              const expectedPatterns = ['附件', '附表', '附图', '相关材料'];
-              for (const ep of expectedPatterns) {
-                if (file.name.includes(ep)) {
-                  continue;
-                }
-              }
+              missing.push(ep);
             }
           }
 
@@ -213,12 +240,13 @@ export class FileScannerService {
 
       for (const entry of entries) {
         const fullPath = path.join(currentPath, entry.name);
+        const isDir = entry.isDirectory();
 
-        if (this.isIgnored(fullPath, ignoreRules)) {
+        if (this.isIgnored(fullPath, ignoreRules, isDir)) {
           continue;
         }
 
-        if (entry.isDirectory()) {
+        if (isDir) {
           if (recursive) {
             await scan(fullPath);
           }

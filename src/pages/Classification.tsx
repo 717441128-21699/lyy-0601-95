@@ -8,8 +8,15 @@ import {
   RefreshCw,
   CheckCircle2,
   AlertCircle,
+  AlertTriangle,
   Sparkles,
 } from 'lucide-react';
+
+const formatFileSize = (bytes: number) => {
+  if (bytes < 1024) return bytes + ' B';
+  if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+  return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
+};
 import { useAppStore } from '../store/useAppStore';
 import FileTypeIcon from '../components/UI/FileTypeIcon';
 import { useNavigate } from 'react-router-dom';
@@ -141,6 +148,43 @@ const Classification: React.FC = () => {
                 </button>
               </div>
             </div>
+
+            {classificationPreview.duplicateGroups && classificationPreview.duplicateGroups.length > 0 && (
+              <div className="mb-6 border border-warning-200 bg-warning-50 rounded-xl p-4">
+                <div className="flex items-center gap-2 mb-4">
+                  <AlertTriangle className="text-warning-600" size={20} />
+                  <h4 className="font-medium text-warning-800">
+                    重复文件合并 ({classificationPreview.duplicateGroups.length} 组，将删除 {classificationPreview.duplicateGroups.reduce((sum, g) => sum + g.toDelete.length, 0)} 个重复文件)
+                  </h4>
+                </div>
+                <div className="space-y-3">
+                  {classificationPreview.duplicateGroups.map((group, groupIndex) => (
+                    <div key={groupIndex} className="bg-white/60 rounded-lg p-3">
+                      <div className="flex items-center justify-between mb-2">
+                        <div className="flex items-center gap-2">
+                          <FileTypeIcon type={group.keepFile.type} size={16} />
+                          <span className="font-medium text-slate-700">保留: {group.keepFile.name}</span>
+                          <span className="text-xs text-slate-400">({formatFileSize(group.keepFile.size)})</span>
+                        </div>
+                        <span className="badge badge-success">保留</span>
+                      </div>
+                      <div className="ml-6 space-y-2">
+                        {group.toDelete.map((file, fileIndex) => (
+                          <div key={fileIndex} className="flex items-center justify-between text-sm">
+                            <div className="flex items-center gap-2">
+                              <FileTypeIcon type={file.type} size={14} />
+                              <span className="text-slate-500 line-through">{file.name}</span>
+                              <span className="text-xs text-slate-400">({formatFileSize(file.size)})</span>
+                            </div>
+                            <span className="badge bg-warning-100 text-warning-700">删除</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
 
             <div className="space-y-4">
               {classificationPreview.groups.map((group, groupIndex) => (

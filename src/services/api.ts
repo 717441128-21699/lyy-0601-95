@@ -201,7 +201,7 @@ export const api = {
         method: 'DELETE',
       }),
     runTaskNow: (id: string) =>
-      request<void>(`/schedule/tasks/${id}/run`, {
+      request<ScheduledTask>(`/schedule/tasks/${id}/run`, {
         method: 'POST',
       }),
   },

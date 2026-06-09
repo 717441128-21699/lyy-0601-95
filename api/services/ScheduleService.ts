@@ -34,13 +34,14 @@ export class ScheduleService {
     }
 
     try {
+      const shouldStart = task.isEnabled !== undefined ? task.isEnabled : task.enabled;
       const scheduled = cron.schedule(
         task.cronExpression,
         async () => {
           await this.executeTask(task);
         },
         {
-          scheduled: task.enabled,
+          scheduled: shouldStart,
           timezone: 'Asia/Shanghai',
         }
       );
@@ -67,30 +68,35 @@ export class ScheduleService {
 
     try {
       const now = new Date().toISOString();
+      const targetPath = task.targetPath || task.sourcePath;
 
-      if (task.action === 'scan' || task.action === 'full') {
-        const scanResult = await this.fileScannerService.scanDirectory(task.sourcePath);
-
-        if (task.action === 'full') {
-          const preview = await this.fileClassifierService.generatePreview(
-            scanResult.files
-          );
-          await this.fileClassifierService.executeClassification(preview);
-          await this.todoGeneratorService.generateTodos(scanResult.files);
-        }
-      } else if (task.action === 'classify') {
+      if (task.type === 'scan' || task.action === 'scan') {
+        await this.fileScannerService.scanDirectory(targetPath);
+      } else if (task.type === 'classify' || task.action === 'classify') {
         const files = this.fileScannerService['fileRecordRepo'].findAll();
         const preview = await this.fileClassifierService.generatePreview(files);
         await this.fileClassifierService.executeClassification(preview);
+      } else if (task.type === 'scan_and_classify' || task.action === 'scan_and_classify' || task.type === 'full' || task.action === 'full') {
+        // 扫描并分类完整流程
+        const scanResult = await this.fileScannerService.scanDirectory(targetPath);
+        const preview = await this.fileClassifierService.generatePreview(scanResult.files);
+        await this.fileClassifierService.executeClassification(preview);
+        await this.todoGeneratorService.generateTodos(scanResult.files);
       }
 
       this.taskRepo.update(task.id, {
         lastRun: now,
+        lastRunAt: now,
       });
 
       console.log(`定时任务完成: ${task.name}`);
     } catch (error) {
       console.error(`定时任务执行失败: ${task.name}`, error);
+      const now = new Date().toISOString();
+      this.taskRepo.update(task.id, {
+        lastRun: now,
+        lastRunAt: now,
+      });
     }
   }
 
@@ -102,7 +108,8 @@ export class ScheduleService {
     task: Omit<ScheduledTask, 'id' | 'createdAt'>
   ): Promise<ScheduledTask> {
     const newTask = this.taskRepo.create(task);
-    if (newTask.enabled) {
+    const shouldSchedule = newTask.isEnabled !== undefined ? newTask.isEnabled : newTask.enabled;
+    if (shouldSchedule) {
       this.scheduleTask(newTask);
     }
     return newTask;
@@ -114,8 +121,9 @@ export class ScheduleService {
   ): Promise<ScheduledTask | undefined> {
     const updated = this.taskRepo.update(id, updates);
     if (updated) {
-      if (updates.enabled !== undefined || updates.cronExpression !== undefined) {
-        if (updated.enabled) {
+      const checkEnabled = updated.isEnabled !== undefined ? updated.isEnabled : updated.enabled;
+      if (updates.isEnabled !== undefined || updates.enabled !== undefined || updates.cronExpression !== undefined) {
+        if (checkEnabled) {
           this.scheduleTask(updated);
         } else {
           const task = this.runningTasks.get(id);
@@ -138,11 +146,13 @@ export class ScheduleService {
     return this.taskRepo.delete(id);
   }
 
-  async runTaskNow(id: string): Promise<void> {
+  async runTaskNow(id: string): Promise<ScheduledTask | undefined> {
     const task = this.taskRepo.findById(id);
     if (task) {
       await this.executeTask(task);
+      return this.taskRepo.findById(id);
     }
+    return undefined;
   }
 
   stopAll(): void {

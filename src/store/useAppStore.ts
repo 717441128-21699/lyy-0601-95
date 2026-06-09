@@ -510,7 +510,14 @@ export const useAppStore = create<AppState>((set, get) => ({
 
   runScheduledTask: async (id) => {
     try {
-      await api.schedule.runTaskNow(id);
+      const response = await api.schedule.runTaskNow(id);
+      if (response.success && response.data) {
+        set((state) => ({
+          scheduledTasks: state.scheduledTasks.map((t) =>
+            t.id === id ? response.data : t
+          ),
+        }));
+      }
       await get().fetchDashboardStats();
       await get().fetchLogs();
     } catch (error) {
